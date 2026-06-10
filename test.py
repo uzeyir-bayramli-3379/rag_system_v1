@@ -1,3 +1,5 @@
+# Indexing step of the RAG pipeline: read a PDF, chunk it, embed the chunks,
+# and upsert them into Supabase/pgvector. Ends with a sample similarity query.
 from chunking_evaluation.chunking import (
     ClusterSemanticChunker,
     LLMSemanticChunker,
@@ -51,13 +53,13 @@ def analyze_chunks(chunks, use_tokens=False):
 client=genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
-
+# Supabase client (service role key) used to upsert chunks and run vector search.
 supa_url:str=os.getenv("SUPABASE_URL")
 supa_service_key:str=os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(supa_url, supa_service_key)
 
 
-#PDF onto text.
+#PDF onto text. Extract every page and cache it to output.txt, then read it back.
 reader=PdfReader("file.pdf")
 with open("output.txt", "w",encoding='utf-8') as f:
     for page in reader.pages:
@@ -85,10 +87,11 @@ token_chunks=chunker.split_text(document)
 ##print("Number of token chunks:", len(token_chunks))
 #analyze_chunks(token_chunks, use_tokens=True)
 
-#Actual embedding model used for this test.
+#Actual embedding model used for this test. Runs locally (no API billing).
+#NOTE: generation.py must use this same model so query and chunk vectors align.
 model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 vectors = model.encode(token_chunks, show_progress_bar=True)
-print(vectors.shape)
+print(vectors.shape)  # (num_chunks, embedding_dim) sanity check
 
 #Plotting the PCA of the chunk embeddings
 #Optional , can be commented out if not needed.
@@ -103,14 +106,17 @@ print(vectors.shape)
 #plt.show()
 
 
+# Pair each chunk with its embedding and build one row per chunk.
 zipped=list(zip(token_chunks, vectors))
 rows=[
     {"document_name": "file.pdf", "chunk_index": i, "chunk_text": chunk, "embedding": vector.tolist()}
     for i, (chunk, vector) in enumerate(zipped)
 ]
+# Upsert keyed on (document_name, chunk_index) so re-runs update instead of duplicating.
 supabase.table("document_chunks").upsert(rows, on_conflict='document_name,chunk_index').execute()
 
 
+# Smoke test: embed a sample question and retrieve the closest chunks.
 question='How is machine learning used to detect damage in aerospace structures?'
 qvec=model.encode(question).tolist()
 response = supabase.rpc(
