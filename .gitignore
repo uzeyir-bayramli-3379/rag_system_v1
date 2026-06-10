@@ -1,2 +1,51 @@
-# Ignore environment file
+# ---- Secrets & credentials ----
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+credentials.json
+service-account*.json
+*-credentials.json
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Caches & tooling ----
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ---- Jupyter ----
+*.ipynb_checkpoints
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+
+# ---- OS files ----
+.DS_Store
+Thumbs.db
+
+# ---- Project data & outputs ----
+output.txt
+*.pdf
+chroma_db/
+*.sqlite3
+*.faiss
