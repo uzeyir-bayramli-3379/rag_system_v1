@@ -5,6 +5,10 @@ from chunking_evaluation.chunking import (
     RecursiveTokenChunker,
     KamradtModifiedChunker
 )
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from sentence_transformers import SentenceTransformer
 import dotenv
 from google import genai
 from PyPDF2 import PdfReader
@@ -59,11 +63,23 @@ chunker=FixedTokenChunker(
     encoding_name="cl100k_base"
 )
 token_chunks=chunker.split_text(document)
-result = client.models.embed_content(
-    model="gemini-embedding-001",
-    contents=token_chunks,               
-)
-vectors = result.embeddings  
-#print("Number of token chunks:", len(token_chunks))
-analyze_chunks(token_chunks, use_tokens=True)
+#result = client.models.embed_content(
+#    model="gemini-embedding-001",
+#    contents=token_chunks,               
+#)
+#vectors = result.embeddings  
+##print("Number of token chunks:", len(token_chunks))
+#analyze_chunks(token_chunks, use_tokens=True)
+model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+vectors = model.encode(token_chunks, show_progress_bar=True)
+print(vectors.shape)
 
+pca=PCA(n_components=2)
+reduced_vectors=pca.fit_transform(vectors)
+plt.figure(figsize=(10, 7))
+plt.scatter(reduced_vectors[:, 0], reduced_vectors[:, 1], alpha=0.5)
+plt.title("PCA of Chunk Embeddings")
+plt.xlabel("Principal Component 1")
+plt.ylabel("Principal Component 2")
+plt.grid()
+plt.show()
