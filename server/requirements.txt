@@ -13,3 +13,6 @@ sentence-transformers==5.5.1
 supabase==2.31.0
 google-genai==2.8.0
 chunking_evaluation @ git+https://github.com/brandonstarxel/chunking_evaluation.git@e708410d1c61cb76a85cd9d433630ef89b9c6b85
+# Imported by chunking_evaluation at load time but missing from its metadata,
+# so pip won't pull it transitively — must be declared explicitly.
+backoff==2.2.1
