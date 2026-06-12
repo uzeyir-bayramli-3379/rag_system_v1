@@ -1,0 +1,16 @@
+INFO:     Started server process [22448]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:51544 - "GET /health HTTP/1.1" 200 OK
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|##########| 199/199 [00:00<00:00, 4843.78it/s]
+INFO:     127.0.0.1:61246 - "POST /upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53013 - "POST /query HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:52245 - "POST /upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54912 - "POST /upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63338 - "POST /upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57521 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55936 - "POST /query HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58381 - "POST /upload HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64196 - "POST /query HTTP/1.1" 200 OK

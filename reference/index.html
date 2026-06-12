@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Task Tracker</title>
+
+<!-- The two hand-drawn fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Patrick+Hand&display=swap" rel="stylesheet" />
+
+<style>
+  /* ---------------------------------------------------------------
+     COLORS — change these in one place and the whole app updates.
+  ---------------------------------------------------------------- */
+  :root {
+    --ink:      #2b2b28;   /* main text / borders */
+    --ink-soft: #6f6e66;   /* greyed-out secondary text */
+    --paper:    #f7f5ef;   /* the "sheet" background */
+    --done:     #3f8f5b;   /* green: completed things */
+    --due:      #cf8a16;   /* amber: due-soon / overdue warnings */
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: radial-gradient(120% 120% at 50% 0%, #fbfaf5 0%, #f1efe7 100%);
+    font-family: 'Patrick Hand', 'Comic Sans MS', cursive;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .stage {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 36px 20px;
+  }
+
+  /* The wobbly "hand-drawn" border look (uneven corner radii) */
+  .sketch {
+    border: 2.6px solid var(--ink);
+    border-radius: 255px 14px 225px 16px / 16px 225px 18px 255px;
+  }
+
+  /* The whole paper sheet: sidebar | divider | tasks | divider | recurring */
+  .sheet {
+    width: min(1280px, 100%);
+    min-height: 620px;
+    background: var(--paper);
+    display: grid;
+    grid-template-columns: 280px 8px 1fr 8px 270px;
+    box-shadow: 7px 9px 0 rgba(43,43,40,0.10);
+    overflow: hidden;
+  }
+
+  .pane-title {
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 30px;
+    margin: 0;
+  }
+
+  /* ---- LEFT: add-a-task sidebar ---- */
+  .sidebar { padding: 30px 26px; display: flex; flex-direction: column; }
+  .add-form { margin-top: 22px; display: flex; flex-direction: column; gap: 20px; }
+  .field { display: flex; flex-direction: column; gap: 7px; }
+  .lbl { font-size: 16px; color: var(--ink-soft); }
+
+  .ink-input {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 19px;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 2.2px dashed #c7c4b8;
+    padding: 4px 2px 6px;
+    outline: none;
+    width: 100%;
+  }
+  .ink-input::placeholder { color: #b4b1a6; }
+  .ink-input:focus { border-bottom-color: var(--ink); border-bottom-style: solid; }
+  input[type="date"].ink-input { font-size: 17px; color: var(--ink-soft); }
+
+  .eta-preview { font-family: 'Caveat', cursive; font-size: 19px; color: var(--ink-soft); }
+
+  .add-btn {
+    margin-top: 4px;
+    align-self: flex-start;
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 22px;
+    padding: 9px 16px;
+    background: var(--ink);
+    color: var(--paper);
+    cursor: pointer;
+    box-shadow: 3px 3px 0 rgba(43,43,40,0.18);
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .add-btn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 rgba(43,43,40,0.18); }
+
+  .hint { margin-top: auto; padding-top: 24px; font-size: 15px; color: var(--ink-soft); line-height: 1.45; }
+
+  /* ---- MIDDLE: the wobbly divider line ---- */
+  .divider svg { width: 8px; height: 100%; display: block; }
+
+  /* ---- RIGHT: the task list ---- */
+  .list-pane { padding: 30px; display: flex; flex-direction: column; }
+  .list-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .counts { font-size: 16px; color: var(--ink-soft); }
+  .counts b { font-weight: bold; }
+  .counts .dot { margin: 0 7px; color: #c2bfb4; }
+
+  .task-list { list-style: none; margin: 0; padding: 0; }
+
+  .task {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 4px;
+    border-bottom: 2px dotted #ddd9cc;
+  }
+  .task:last-child { border-bottom: none; }
+  .task-body { flex: 1; min-width: 0; position: relative; }
+  .task-name { font-size: 21px; }
+  .task-meta { font-size: 16px; color: var(--ink-soft); margin-left: 4px; }
+  .m-due.soon, .m-due.over { font-weight: bold; color: var(--due); }
+
+  /* Completed task styling: faded + a drawn line through it */
+  .task.done .task-name, .task.done .task-meta { color: var(--ink-soft); }
+  .task.done .task-body::after {
+    content: "";
+    position: absolute;
+    left: -2px; right: -2px;
+    top: 52%;
+    height: 2.6px;
+    background: var(--done);
+    transform: rotate(-.7deg);
+    border-radius: 2px;
+  }
+
+  .stamp {
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 2px;
+    color: var(--done);
+    transform: rotate(-3deg);
+    white-space: nowrap;
+  }
+
+  /* Hand-drawn checkbox button */
+  .checkbox {
+    flex: 0 0 auto;
+    width: 30px; height: 30px;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform .1s ease;
+  }
+  .checkbox:hover { transform: scale(1.08) rotate(-2deg); }
+  .checkbox:active { transform: scale(.92); }
+  .checkbox svg { width: 22px; height: 22px; }
+
+  .trash-btn {
+    flex: 0 0 auto;
+    width: 28px; height: 28px;
+    padding: 3px;
+    background: transparent; border: none;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s ease, transform .1s ease;
+    display: grid; place-items: center;
+  }
+  .trash-btn svg { width: 20px; height: 20px; }
+  .task:hover .trash-btn { opacity: .45; }
+  .trash-btn:hover { opacity: 1; transform: scale(1.12) rotate(-3deg); }
+
+  .empty { padding: 28px 4px; font-size: 18px; color: var(--ink-soft); }
+
+  .confirm-btns { display: flex; gap: 6px; flex: 0 0 auto; align-items: center; }
+  .confirm-yes, .confirm-no {
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 17px;
+    padding: 3px 11px;
+    cursor: pointer;
+    border: 2px solid;
+    background: transparent;
+    border-radius: 255px 8px 225px 8px / 8px 225px 8px 255px;
+    transition: transform .08s ease;
+  }
+  .confirm-yes:active, .confirm-no:active { transform: scale(.94); }
+  .confirm-yes { color: #c0392b; border-color: #c0392b; }
+  .confirm-no  { color: var(--ink-soft); border-color: #c7c4b8; }
+
+  /* "completed" separator label */
+  .group-sep {
+    list-style: none;
+    margin: 18px 0 6px;
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: 1px;
+    color: var(--ink-soft);
+    border-bottom: 2px solid var(--done);
+    padding-bottom: 2px;
+  }
+
+  /* ---- RECURRING pane ---- */
+  .rec-pane { padding: 30px 22px; display: flex; flex-direction: column; }
+
+  .rec-form { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* custom dropdown */
+  .ink-drop { position: relative; flex: 1; }
+
+  .ink-drop-trigger {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 16px;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 2.2px dashed #c7c4b8;
+    padding: 3px 2px 5px;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    transition: border-color .12s ease, border-style .12s ease;
+  }
+  .ink-drop.open .ink-drop-trigger {
+    border-bottom-style: solid;
+    border-bottom-color: var(--ink);
+  }
+
+  .drop-caret {
+    font-size: 11px;
+    flex-shrink: 0;
+    transition: transform .15s ease;
+    color: var(--ink-soft);
+  }
+  .ink-drop.open .drop-caret { transform: rotate(180deg); }
+
+  .ink-drop-menu {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: -6px;
+    min-width: calc(100% + 12px);
+    background: var(--paper);
+    list-style: none;
+    margin: 0;
+    padding: 5px 0;
+    z-index: 100;
+    display: none;
+    border: 2.2px solid var(--ink);
+    border-radius: 4px 18px 4px 18px / 18px 4px 18px 4px;
+    box-shadow: 3px 4px 0 rgba(43,43,40,0.12);
+  }
+  .ink-drop.open .ink-drop-menu { display: block; }
+
+  .ink-drop-menu li { margin: 0; padding: 0; }
+  .ink-drop-menu button {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 16px;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background .1s ease;
+  }
+  .ink-drop-menu button:hover { background: rgba(43,43,40,0.07); }
+  .ink-drop-menu button.active {
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+  }
+
+  .rec-selects { display: flex; gap: 10px; }
+
+  .rec-list { list-style: none; margin: 16px 0 0; padding: 0; }
+
+  .rec-task {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 2px;
+    border-bottom: 2px dotted #ddd9cc;
+  }
+  .rec-task:last-child { border-bottom: none; }
+
+  .rec-body { flex: 1; min-width: 0; }
+  .rec-name { font-size: 18px; line-height: 1.2; }
+
+  .rec-badge {
+    display: inline-block;
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 1px 7px;
+    border: 1.8px solid;
+    border-radius: 255px 6px 225px 6px / 6px 225px 6px 255px;
+    letter-spacing: .4px;
+    margin-top: 2px;
+  }
+  .rec-badge.due       { color: var(--due);  border-color: var(--due); }
+  .rec-badge.done-t    { color: var(--done); border-color: var(--done); }
+  .rec-badge.not-today { color: #b4b1a6;     border-color: #d5d2c9; }
+
+  .rec-tick {
+    flex: 0 0 auto;
+    width: 28px; height: 28px;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform .1s ease;
+  }
+  .rec-tick:hover:not(:disabled) { transform: scale(1.1) rotate(-2deg); }
+  .rec-tick:disabled { opacity: .3; cursor: default; }
+  .rec-tick svg { width: 20px; height: 20px; }
+
+  .rec-trash {
+    flex: 0 0 auto;
+    width: 24px; height: 24px;
+    padding: 2px;
+    background: transparent; border: none;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s ease, transform .1s ease;
+    display: grid; place-items: center;
+  }
+  .rec-trash svg { width: 15px; height: 15px; }
+  .rec-task:hover .rec-trash { opacity: .4; }
+  .rec-trash:hover { opacity: 1 !important; transform: scale(1.1) rotate(-3deg); }
+
+  /* ---- view toggle (list / week) ---- */
+  .view-toggle {
+    display: flex;
+    border: 2.2px solid var(--ink);
+    border-radius: 255px 8px 225px 8px / 8px 225px 8px 255px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .vt-btn {
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 16px;
+    padding: 3px 13px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-soft);
+    transition: background .12s ease, color .12s ease;
+  }
+  .vt-btn.active { background: var(--ink); color: var(--paper); }
+
+  /* ---- week view ---- */
+  .week-view { display: flex; flex-direction: column; flex: 1; }
+
+  .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .wk-range {
+    font-family: 'Caveat', cursive;
+    font-size: 18px;
+    color: var(--ink-soft);
+  }
+  .wk-nav-btn {
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 22px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--ink);
+    padding: 2px 8px;
+    transition: transform .1s ease;
+  }
+  .wk-nav-btn:hover { transform: scale(1.25); }
+
+  .week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    align-items: start;
+  }
+
+  .week-day { display: flex; flex-direction: column; }
+
+  .week-day-hdr {
+    text-align: center;
+    padding: 4px 2px 6px;
+    border-bottom: 2px solid #ddd9cc;
+    margin-bottom: 6px;
+  }
+  .wd-name {
+    display: block;
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--ink-soft);
+    letter-spacing: .5px;
+  }
+  .wd-num {
+    display: block;
+    font-family: 'Caveat', cursive;
+    font-weight: 700;
+    font-size: 28px;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .week-day.today .week-day-hdr { border-bottom-color: var(--due); }
+  .week-day.today .wd-name,
+  .week-day.today .wd-num { color: var(--due); }
+  .week-day.past .wd-name,
+  .week-day.past .wd-num { color: #c2bfb4; }
+
+  .week-task {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 13px;
+    line-height: 1.3;
+    padding: 4px 6px;
+    margin-bottom: 4px;
+    border: 1.6px solid #ddd9cc;
+    border-radius: 4px 12px 4px 12px / 12px 4px 12px 4px;
+    cursor: pointer;
+    word-break: break-word;
+    transition: background .1s ease;
+  }
+  .week-task:hover { background: rgba(43,43,40,0.06); }
+  .week-task.done {
+    color: var(--ink-soft);
+    border-color: #e8e5dc;
+    text-decoration: line-through;
+    text-decoration-color: var(--done);
+  }
+  .week-empty { font-size: 12px; color: #d0cdc4; text-align: center; padding: 4px 0; }
+
+  /* Stack into one column on narrow screens / phones */
+  @media (max-width: 900px) {
+    .sheet { grid-template-columns: 1fr; min-height: 0; }
+    .divider { display: none; }
+    .sidebar { border-bottom: 2.4px solid var(--ink); }
+    .rec-pane { border-top: 2.4px solid var(--ink); }
+  }
+</style>
+</head>
+
+<body>
+  <div class="stage">
+    <div class="sheet sketch">
+
+      <!-- LEFT: add a task -->
+      <aside class="sidebar">
+        <h1 class="pane-title">new task</h1>
+        <form class="add-form" id="add-form">
+          <label class="field">
+            <span class="lbl">what needs doing?</span>
+            <input class="ink-input" id="name-input" placeholder="task name…" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span class="lbl">deadline</span>
+            <input class="ink-input" id="date-input" type="date" />
+            <span class="eta-preview" id="eta-preview">eta is calculated from today</span>
+          </label>
+          <button class="add-btn sketch" type="submit">+ add task</button>
+        </form>
+        <p class="hint">tip — tick the box on the right to mark a task done. it'll drop into "completed" below.</p>
+      </aside>
+
+      <!-- MIDDLE: wobbly divider -->
+      <div class="divider" aria-hidden="true">
+        <svg viewBox="0 0 8 600" preserveAspectRatio="none">
+          <path d="M4 4 C 2 150, 6 300, 3 450 S 5 560, 4 596"
+                fill="none" stroke="#2b2b28" stroke-width="2.4" stroke-linecap="round" />
+        </svg>
+      </div>
+
+      <!-- MIDDLE: task list / week view -->
+      <section class="list-pane">
+        <header class="list-head">
+          <h2 class="pane-title">tasks</h2>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="counts" id="counts"></span>
+            <div class="view-toggle">
+              <button class="vt-btn active" id="btn-list" type="button">list</button>
+              <button class="vt-btn"        id="btn-week" type="button">week</button>
+            </div>
+          </div>
+        </header>
+        <ul class="task-list" id="task-list"></ul>
+        <div class="week-view" id="week-view" style="display:none">
+          <div class="week-nav">
+            <button class="wk-nav-btn" id="wk-prev" type="button">←</button>
+            <span class="wk-range" id="wk-range"></span>
+            <button class="wk-nav-btn" id="wk-next" type="button">→</button>
+          </div>
+          <div class="week-grid" id="week-grid"></div>
+        </div>
+      </section>
+
+      <!-- DIVIDER 2 -->
+      <div class="divider" aria-hidden="true">
+        <svg viewBox="0 0 8 600" preserveAspectRatio="none">
+          <path d="M4 4 C 5 150, 3 300, 5 450 S 3 560, 4 596"
+                fill="none" stroke="#2b2b28" stroke-width="2.4" stroke-linecap="round" />
+        </svg>
+      </div>
+
+      <!-- RIGHT: recurring tasks -->
+      <section class="rec-pane">
+        <h2 class="pane-title">recurring</h2>
+        <form class="rec-form" id="rec-form">
+          <input class="ink-input" id="rec-name" placeholder="habit name…" autocomplete="off" />
+          <div class="rec-selects">
+            <!-- frequency picker -->
+            <div class="ink-drop" id="freq-drop">
+              <button class="ink-drop-trigger" type="button" data-value="daily">
+                daily <span class="drop-caret">▾</span>
+              </button>
+              <ul class="ink-drop-menu">
+                <li><button type="button" data-dropval="daily"    class="active">daily</button></li>
+                <li><button type="button" data-dropval="weekdays"         >weekdays</button></li>
+                <li><button type="button" data-dropval="weekly"           >weekly</button></li>
+                <li><button type="button" data-dropval="monthly"          >monthly</button></li>
+              </ul>
+            </div>
+            <!-- day-of-week picker (weekly only) -->
+            <div class="ink-drop" id="day-drop" style="display:none">
+              <button class="ink-drop-trigger" type="button" data-value="1">
+                monday <span class="drop-caret">▾</span>
+              </button>
+              <ul class="ink-drop-menu">
+                <li><button type="button" data-dropval="1" class="active">monday</button></li>
+                <li><button type="button" data-dropval="2"               >tuesday</button></li>
+                <li><button type="button" data-dropval="3"               >wednesday</button></li>
+                <li><button type="button" data-dropval="4"               >thursday</button></li>
+                <li><button type="button" data-dropval="5"               >friday</button></li>
+                <li><button type="button" data-dropval="6"               >saturday</button></li>
+                <li><button type="button" data-dropval="0"               >sunday</button></li>
+              </ul>
+            </div>
+          </div>
+          <button class="add-btn sketch" type="submit" style="font-size:18px;padding:7px 13px">+ add</button>
+        </form>
+        <ul class="rec-list" id="rec-list"></ul>
+      </section>
+
+    </div>
+  </div>
+
+<script>
+
+  
+/* ===================================================================
+   TASK TRACKER  —  plain HTML/CSS/JS, no framework.
+
+   How it works (read this top to bottom):
+   1. `tasks` is one array — the single source of truth.
+   2. Any change (add / toggle / delete) edits that array,
+      calls save(), then calls render() to redraw the screen.
+   3. render() rebuilds the list from the array every time.
+
+   That "change array -> save -> redraw" loop is the whole app.
+=================================================================== */
+
+const STORE_KEY = 'task-tracker.tasks';
+
+// Load saved tasks on startup. Wrapped in try/catch so it never
+// crashes if storage is unavailable (e.g. a sandboxed preview).
+function load() {
+  try {
+    return JSON.parse(localStorage.getItem(STORE_KEY)) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// Save the current tasks array to the browser.
+function save() {
+  try {
+    const clean = tasks.map(({ confirming, ...rest }) => rest);
+    localStorage.setItem(STORE_KEY, JSON.stringify(clean));
+  } catch (e) {
+    /* ignore — app still works for this session, just won't persist */
+  }
+}
+
+let tasks = load();
+let seq = 0; // tracks the order things were completed in
+
+// ---- date helpers -------------------------------------------------
+const pad = (n) => String(n).padStart(2, '0');
+
+// whole days from today until the deadline (negative = overdue)
+function daysUntil(iso) {
+  if (!iso) return null;
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const target = new Date(iso + 'T00:00:00');
+  return Math.round((target - now) / 86400000);
+}
+
+// turn a deadline into a friendly ETA like "3 days" or "~2 months"
+function etaText(iso) {
+  const d = daysUntil(iso);
+  if (d === null || d < 0) return 'past due date';
+  if (d === 0) return 'today';
+  if (d === 1) return '1 day';
+  if (d < 45) return d + ' days';
+  const months = Math.round(d / 30);
+  return '~' + months + ' month' + (months > 1 ? 's' : '');
+}
+
+// the "due ..." text shown on each task
+function dueText(iso) {
+  const d = daysUntil(iso);
+  if (d === null) return '';
+  if (d < 0) return 'overdue ' + Math.abs(d) + 'd';
+  if (d === 0) return 'due today';
+  const dt = new Date(iso + 'T00:00:00');
+  return 'due ' + pad(dt.getDate()) + '/' + pad(dt.getMonth() + 1);
+}
+
+// stop typed task names from breaking the HTML
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// ---- the three actions --------------------------------------------
+function addTask(name, deadline) {
+  tasks.push({
+    id: Date.now() + '' + Math.floor(Math.random() * 1000),
+    name: name,
+    deadline: deadline,   // "" if none
+    done: false,
+    seq: 0,
+  });
+  save();
+  render();
+}
+
+function toggleTask(id) {
+  const t = tasks.find((t) => t.id === id);
+  if (!t) return;
+  t.done = !t.done;
+  t.seq = t.done ? ++seq : 0; // remember completion order
+  save();
+  render();
+}
+
+function deleteTask(id) {
+  tasks = tasks.filter((t) => t.id !== id);
+  save();
+  render();
+}
+function deleteActiveTasks() {
+  tasks = tasks.filter((t) => t.done);
+  save();
+  render();
+}
+
+// ---- drawing the screen -------------------------------------------
+const listEl   = document.getElementById('task-list');
+const countsEl = document.getElementById('counts');
+
+// HTML for a single task row
+function taskRowHTML(t) {
+  const d = daysUntil(t.deadline);
+  const soon = !t.done && d !== null && d >= 0 && d <= 2;
+  const over = !t.done && d !== null && d < 0;
+  const eta  = t.done ? '' : etaText(t.deadline);
+
+  const check = t.done
+    ? '<path d="M4 13 C 7 16, 9 18, 10 19 C 13 13, 17 7, 21 4" fill="none" stroke="#3f8f5b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
+    : '';
+
+  return (
+    '<li class="task ' + (t.done ? 'done' : '') + '">' +
+      '<div class="task-body">' +
+        '<span class="task-name">' + escapeHtml(t.name) + '</span>' +
+        '<span class="task-meta">' +
+          (eta ? ' · eta ' + eta : '') +
+          (t.deadline ? ' · <span class="m-due ' + (soon ? 'soon' : '') + (over ? 'over' : '') + '">' + dueText(t.deadline) + '</span>' : '') +
+        '</span>' +
+      '</div>' +
+      (t.done ? '<span class="stamp">COMPLETE</span>' : '') +
+      (t.confirming
+        ? '<div class="confirm-btns">' +
+            '<button class="confirm-no"  data-action="cancel-delete" data-id="' + t.id + '">no</button>' +
+            '<button class="confirm-yes" data-action="confirm-delete" data-id="' + t.id + '">yes</button>' +
+          '</div>'
+        : '<button class="trash-btn" data-action="delete" data-id="' + t.id + '" title="delete">' +
+            '<svg viewBox="0 0 24 24"><path d="M4 6 H20 M9 6 V4 H15 V6 M6 6 L7 20 H17 L18 6" fill="none" stroke="#2b2b28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+          '</button>') +
+      '<button class="checkbox sketch" data-action="toggle" data-id="' + t.id + '" style="' + (t.done ? 'border-color:#3f8f5b' : '') + '">' +
+        '<svg viewBox="0 0 24 24">' + check + '</svg>' +
+      '</button>' +
+    '</li>'
+  );
+}
+
+function render() {
+  // split into active vs done
+  const active = tasks.filter((t) => !t.done);
+  const done   = tasks.filter((t) => t.done);
+
+  // active tasks: soonest deadline first (no-deadline tasks last)
+  active.sort((a, b) => {
+    const da = daysUntil(a.deadline), db = daysUntil(b.deadline);
+    if (da === null) return db === null ? 0 : 1;
+    if (db === null) return -1;
+    return da - db;
+  });
+  // done tasks: most recently completed first
+  done.sort((a, b) => b.seq - a.seq);
+
+  // keep `seq` ahead of anything already saved
+  done.forEach((t) => { if (t.seq > seq) seq = t.seq; });
+
+  let html = '';
+  if (tasks.length === 0) {
+    html = '<li class="empty">nothing here yet — add a task on the left.</li>';
+  } else {
+    html += active.map(taskRowHTML).join('');
+    if (done.length) html += '<li class="group-sep">completed</li>';
+    html += done.map(taskRowHTML).join('');
+  }
+  listEl.innerHTML = html;
+
+  countsEl.innerHTML =
+    '<b>' + active.length + '</b> active <span class="dot">·</span> ' +
+    '<b style="color:#3f8f5b">' + done.length + '</b> done';
+
+  if (typeof currentView !== 'undefined' && currentView === 'week') renderWeek();
+}
+
+// ---- wiring up the buttons & form ---------------------------------
+
+// One click listener for the whole list (works for every row,
+// even ones added later). This is called "event delegation".
+listEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (btn.dataset.action === 'toggle') toggleTask(id);
+  if (btn.dataset.action === 'delete') {
+    const task = tasks.find((t) => t.id === id);
+    if (task && !task.done) {
+      task.confirming = true;
+      render();
+    } else {
+      deleteTask(id);
+    }
+  }
+  if (btn.dataset.action === 'confirm-delete') deleteTask(id);
+  if (btn.dataset.action === 'cancel-delete') {
+    const task = tasks.find((t) => t.id === id);
+    if (task) { task.confirming = false; render(); }
+  }
+});
+
+// live ETA preview while picking a date
+const nameInput = document.getElementById('name-input');
+const dateInput = document.getElementById('date-input');
+const etaPrev   = document.getElementById('eta-preview');
+dateInput.addEventListener('change', () => {
+  etaPrev.textContent = dateInput.value
+    ? 'eta — ' + (etaText(dateInput.value) || 'past date')
+    : 'eta is calculated from today';
+});
+
+// add-task form
+document.getElementById('add-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = nameInput.value.trim();
+  if (!name) { nameInput.focus(); return; }
+  addTask(name, dateInput.value || '');
+  nameInput.value = '';
+  dateInput.value = '';
+  etaPrev.textContent = 'eta is calculated from today';
+  nameInput.focus();
+});
+
+// ---- recurring tasks -----------------------------------------------
+const REC_KEY = 'task-tracker.recurring';
+
+function loadRec() {
+  try { return JSON.parse(localStorage.getItem(REC_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveRec() {
+  try { localStorage.setItem(REC_KEY, JSON.stringify(recurring)); }
+  catch (e) {}
+}
+
+let recurring = loadRec();
+
+const DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+
+function todayISO() {
+  const n = new Date();
+  return n.getFullYear() + '-' + pad(n.getMonth() + 1) + '-' + pad(n.getDate());
+}
+
+function isRecDueToday(r) {
+  const today = todayISO();
+  const dow   = new Date().getDay();
+  if (r.freq === 'daily')    return !r.lastDone || r.lastDone < today;
+  if (r.freq === 'weekdays') return dow >= 1 && dow <= 5 && (!r.lastDone || r.lastDone < today);
+  if (r.freq === 'weekly')   return dow === r.weekday && (!r.lastDone || r.lastDone < today);
+  if (r.freq === 'monthly') {
+    if (!r.lastDone) return true;
+    const ld = new Date(r.lastDone + 'T00:00:00'), td = new Date();
+    return ld.getFullYear() !== td.getFullYear() || ld.getMonth() !== td.getMonth();
+  }
+  return false;
+}
+
+function recLabel(r) {
+  return r.freq === 'weekly' ? 'weekly · ' + DAYS[r.weekday].slice(0, 3) : r.freq;
+}
+
+function addRecurring(name, freq, weekday) {
+  recurring.push({
+    id: Date.now() + '' + Math.floor(Math.random() * 1000),
+    name, freq,
+    weekday: freq === 'weekly' ? weekday : 0,
+    lastDone: '',
+  });
+  saveRec(); renderRec();
+}
+
+function tickRecurring(id) {
+  const r = recurring.find((r) => r.id === id);
+  if (!r) return;
+  r.lastDone = todayISO();
+  saveRec(); renderRec();
+}
+
+function deleteRecurring(id) {
+  recurring = recurring.filter((r) => r.id !== id);
+  saveRec(); renderRec();
+}
+
+const recListEl = document.getElementById('rec-list');
+
+function recRowHTML(r) {
+  const due       = isRecDueToday(r);
+  const doneToday = r.lastDone === todayISO();
+  const badgeClass = due ? 'due' : doneToday ? 'done-t' : 'not-today';
+  const badgeText  = due ? recLabel(r) + ' · due' : doneToday ? 'done today' : recLabel(r);
+  const checkPath  = doneToday
+    ? '<path d="M4 13 C 7 16, 9 18, 10 19 C 13 13, 17 7, 21 4" fill="none" stroke="#3f8f5b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
+    : '';
+
+  return (
+    '<li class="rec-task">' +
+      '<div class="rec-body">' +
+        '<div class="rec-name">' + escapeHtml(r.name) + '</div>' +
+        '<span class="rec-badge ' + badgeClass + '">' + escapeHtml(badgeText) + '</span>' +
+      '</div>' +
+      '<button class="rec-trash" data-raction="delete" data-rid="' + r.id + '" title="delete">' +
+        '<svg viewBox="0 0 24 24"><path d="M4 6 H20 M9 6 V4 H15 V6 M6 6 L7 20 H17 L18 6" fill="none" stroke="#2b2b28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '</button>' +
+      '<button class="rec-tick sketch" data-raction="tick" data-rid="' + r.id + '"' + (doneToday ? ' disabled' : '') + '>' +
+        '<svg viewBox="0 0 24 24">' + checkPath + '</svg>' +
+      '</button>' +
+    '</li>'
+  );
+}
+
+function renderRec() {
+  if (recurring.length === 0) {
+    recListEl.innerHTML = '<li class="empty" style="font-size:16px">no habits yet.</li>';
+    return;
+  }
+  const sorted = [...recurring].sort((a, b) => {
+    const ad = isRecDueToday(a), bd = isRecDueToday(b);
+    if (ad !== bd) return ad ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  recListEl.innerHTML = sorted.map(recRowHTML).join('');
+}
+
+recListEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-raction]');
+  if (!btn) return;
+  const id = btn.dataset.rid;
+  if (btn.dataset.raction === 'tick')   tickRecurring(id);
+  if (btn.dataset.raction === 'delete') deleteRecurring(id);
+});
+
+// ---- custom dropdowns ---------------------------------------------
+function initDrop(dropEl, onChange) {
+  const trigger = dropEl.querySelector('.ink-drop-trigger');
+  const opts    = dropEl.querySelectorAll('.ink-drop-menu button');
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.ink-drop.open').forEach((d) => {
+      if (d !== dropEl) d.classList.remove('open');
+    });
+    dropEl.classList.toggle('open');
+  });
+
+  opts.forEach((opt) => {
+    opt.addEventListener('click', () => {
+      const val  = opt.dataset.dropval;
+      const text = opt.textContent.trim();
+      trigger.dataset.value = val;
+      // update label text node (first child), keep the caret span
+      trigger.firstChild.textContent = text + ' ';
+      opts.forEach((o) => o.classList.remove('active'));
+      opt.classList.add('active');
+      dropEl.classList.remove('open');
+      if (onChange) onChange(val);
+    });
+  });
+}
+
+document.addEventListener('click', () => {
+  document.querySelectorAll('.ink-drop.open').forEach((d) => d.classList.remove('open'));
+});
+
+const freqDrop = document.getElementById('freq-drop');
+const dayDrop  = document.getElementById('day-drop');
+
+initDrop(freqDrop, (val) => {
+  dayDrop.style.display = val === 'weekly' ? '' : 'none';
+});
+initDrop(dayDrop);
+
+document.getElementById('rec-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = document.getElementById('rec-name').value.trim();
+  if (!name) { document.getElementById('rec-name').focus(); return; }
+  const freq    = freqDrop.querySelector('.ink-drop-trigger').dataset.value;
+  const weekday = parseInt(dayDrop.querySelector('.ink-drop-trigger').dataset.value, 10);
+  addRecurring(name, freq, weekday);
+  document.getElementById('rec-name').value = '';
+});
+
+// ---- week view -----------------------------------------------------
+let currentView = 'list';
+let weekOffset  = 0;
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function getWeekDays(offset) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dow    = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+function dayISO(d) {
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function renderWeek() {
+  const days    = getWeekDays(weekOffset);
+  const today   = todayISO();
+  const gridEl  = document.getElementById('week-grid');
+  const rangeEl = document.getElementById('wk-range');
+
+  const first = days[0], last = days[6];
+  rangeEl.textContent =
+    pad(first.getDate()) + '/' + pad(first.getMonth() + 1) +
+    ' – ' +
+    pad(last.getDate()) + '/' + pad(last.getMonth() + 1);
+
+  gridEl.innerHTML = days.map((day, i) => {
+    const iso      = dayISO(day);
+    const isToday  = iso === today;
+    const isPast   = iso < today;
+    const dayTasks = tasks
+      .filter((t) => t.deadline === iso)
+      .sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+
+    const cards = dayTasks.map((t) =>
+      '<div class="week-task' + (t.done ? ' done' : '') + '" data-wk-id="' + t.id + '">' +
+        escapeHtml(t.name) +
+      '</div>'
+    ).join('') || '<span class="week-empty">—</span>';
+
+    return (
+      '<div class="week-day' + (isToday ? ' today' : isPast ? ' past' : '') + '">' +
+        '<div class="week-day-hdr">' +
+          '<span class="wd-name">' + DAY_NAMES[i] + '</span>' +
+          '<span class="wd-num">'  + day.getDate() + '</span>' +
+        '</div>' +
+        cards +
+      '</div>'
+    );
+  }).join('');
+}
+
+document.getElementById('week-grid').addEventListener('click', (e) => {
+  const card = e.target.closest('.week-task[data-wk-id]');
+  if (!card) return;
+  toggleTask(card.dataset.wkId);
+  renderWeek();
+});
+
+document.getElementById('wk-prev').addEventListener('click', () => { weekOffset--; renderWeek(); });
+document.getElementById('wk-next').addEventListener('click', () => { weekOffset++; renderWeek(); });
+
+function setView(v) {
+  currentView = v;
+  document.getElementById('task-list').style.display  = v === 'list' ? '' : 'none';
+  document.getElementById('week-view').style.display  = v === 'week' ? '' : 'none';
+  document.getElementById('btn-list').classList.toggle('active', v === 'list');
+  document.getElementById('btn-week').classList.toggle('active', v === 'week');
+  if (v === 'week') renderWeek();
+}
+
+document.getElementById('btn-list').addEventListener('click', () => setView('list'));
+document.getElementById('btn-week').addEventListener('click', () => setView('week'));
+
+// ---- first paint ---------------------------------------------------
+render();
+renderRec();
+</script>
+</body>
+</html>

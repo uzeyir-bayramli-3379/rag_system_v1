@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+/* ===================================================================
+   HAND-DRAWN DESIGN TOKENS — ported from the Task Tracker reference.
+   Change a value here and the whole app follows.
+=================================================================== */
+:root {
+  --ink:        #2b2b28;   /* main text / borders            */
+  --ink-soft:   #6f6e66;   /* greyed-out secondary text      */
+  --paper:      #f7f5ef;   /* the "sheet" background         */
+  --paper-edge: #ece9df;   /* slightly darker paper for fills*/
+  --done:       #3f8f5b;   /* green: success / grounded      */
+  --due:        #cf8a16;   /* amber: warnings                */
+  --accent:     #5b7aa8;   /* slate-blue: the "you" voice    */
+  --accent-soft:#e3ebf5;   /* tint for accent surfaces       */
+  --hair:       #d8d4c7;   /* dashed/dotted separators       */
+}
+
+@theme inline {
+  --font-sans: var(--font-patrick);
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-accent: var(--accent);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: radial-gradient(120% 120% at 50% 0%, #fbfaf5 0%, #f1efe7 100%);
+  color: var(--ink);
+  font-family: var(--font-patrick), "Comic Sans MS", cursive;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- the wobbly "hand-drawn" border look (uneven corner radii) ---- */
+.sketch {
+  border: 2.6px solid var(--ink);
+  border-radius: 255px 14px 225px 16px / 16px 225px 18px 255px;
+}
+/* a second wobble variant so repeated elements don't look identical */
+.sketch-b { border-radius: 14px 255px 16px 225px / 225px 16px 255px 18px; }
+/* small wobble for chips / bubbles */
+.sketch-sm {
+  border: 2.2px solid var(--ink);
+  border-radius: 18px 5px 16px 6px / 6px 16px 5px 18px;
+}
+.sketch-sm-b { border-radius: 5px 18px 6px 16px / 16px 6px 18px 5px; }
+
+.lift { box-shadow: 7px 9px 0 rgba(43, 43, 40, 0.10); }
+.lift-sm { box-shadow: 3px 4px 0 rgba(43, 43, 40, 0.13); }
+
+/* ---- headings / labels ---- */
+.handwrite {
+  font-family: var(--font-caveat), cursive;
+  font-weight: 700;
+}
+.pane-title { font-family: var(--font-caveat), cursive; font-weight: 700; }
+
+/* ---- dashed ink input (underline style) ---- */
+.ink-input {
+  font-family: var(--font-patrick), cursive;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-bottom: 2.2px dashed var(--hair);
+  padding: 6px 2px 7px;
+  outline: none;
+  width: 100%;
+}
+.ink-input::placeholder { color: #b4b1a6; }
+.ink-input:focus { border-bottom-color: var(--ink); border-bottom-style: solid; }
+
+/* ---- primary "ink" button ---- */
+.ink-btn {
+  font-family: var(--font-caveat), cursive;
+  font-weight: 700;
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  box-shadow: 3px 3px 0 rgba(43, 43, 40, 0.18);
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.ink-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 rgba(43, 43, 40, 0.18); }
+.ink-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+/* ---- accent send button (the blue arrow in the sketch) ---- */
+.send-btn {
+  background: var(--accent);
+  color: var(--paper);
+  cursor: pointer;
+  box-shadow: 3px 3px 0 rgba(91, 122, 168, 0.30);
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.send-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 rgba(91, 122, 168, 0.30); }
+.send-btn:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
+
+/* ---- follow-up chip ---- */
+.chip {
+  font-family: var(--font-patrick), cursive;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  transition: background .12s ease, transform .08s ease;
+}
+.chip:hover { background: rgba(43, 43, 40, 0.06); }
+.chip:active { transform: scale(.96); }
+
+/* ---- "thinking" animated dots ---- */
+.dots span {
+  display: inline-block;
+  animation: blink 1.4s infinite both;
+}
+.dots span:nth-child(2) { animation-delay: .2s; }
+.dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes blink {
+  0%, 80%, 100% { opacity: .25; }
+  40% { opacity: 1; }
+}
+
+/* gentle sparkle pulse on the AI avatar while it thinks */
+.sparkle-pulse { animation: sparkle 1.6s ease-in-out infinite; transform-origin: center; }
+@keyframes sparkle {
+  0%, 100% { opacity: .55; transform: scale(.92) rotate(-4deg); }
+  50%      { opacity: 1;   transform: scale(1.06) rotate(4deg); }
+}
+
+/* ---- upload -> chat view transition ---- */
+.card-enter { animation: card-in .32s cubic-bezier(.22, .61, .36, 1) both; }
+@keyframes card-in {
+  from { opacity: 0; transform: translateX(30px) rotate(.4deg); }
+  to   { opacity: 1; transform: none; }
+}
+.card-leave { animation: card-out .24s ease-in both; }
+@keyframes card-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(-30px) rotate(-.4deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sparkle-pulse, .dots span { animation: none; }
+  .card-enter, .card-leave { animation: none; }
+}

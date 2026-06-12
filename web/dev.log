@@ -1,0 +1,26 @@
+
+> web@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.9 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.31.253:3000
+✓ Ready in 435ms
+
+ GET / 200 in 1949ms (next.js: 1818ms, application-code: 131ms)
+ GET / 200 in 53ms (next.js: 5ms, application-code: 47ms)
+ POST /api/upload 200 in 6.4s (next.js: 148ms, application-code: 6.2s)
+✓ Compiled in 49ms
+ GET / 200 in 93ms (next.js: 46ms, application-code: 47ms)
+ GET / 200 in 34ms (next.js: 4ms, application-code: 29ms)
+ POST /api/upload 200 in 7.4s (next.js: 25ms, application-code: 7.3s)
+✓ Compiled in 44ms
+✓ Compiled in 38ms
+ GET / 200 in 103ms (next.js: 46ms, application-code: 57ms)
+ GET / 200 in 34ms (next.js: 6ms, application-code: 28ms)
+ POST /api/upload 200 in 6.7s (next.js: 15ms, application-code: 6.7s)
+ POST /api/query 200 in 4.2s (next.js: 69ms, application-code: 4.1s)
+ POST /api/query 200 in 11.4s (next.js: 2ms, application-code: 11.4s)
+ GET / 200 in 54ms (next.js: 8ms, application-code: 46ms)
+ POST /api/upload 200 in 2.7s (next.js: 3ms, application-code: 2.7s)
+ POST /api/query 200 in 7.5s (next.js: 1801µs, application-code: 7.5s)
