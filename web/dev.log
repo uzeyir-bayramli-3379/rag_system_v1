@@ -27,3 +27,5 @@
  GET / 200 in 39ms (next.js: 6ms, application-code: 33ms)
  POST /api/upload 200 in 9.5s (next.js: 4ms, application-code: 9.5s)
  POST /api/query 200 in 7.1s (next.js: 27ms, application-code: 7.1s)
+ GET / 200 in 264ms (next.js: 25ms, application-code: 239ms)
+ POST /api/upload 502 in 36ms (next.js: 3ms, application-code: 32ms)

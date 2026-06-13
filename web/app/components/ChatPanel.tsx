@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { SparkleIcon, ArrowUpIcon, PdfIcon } from "./icons";
 import type { Turn } from "../lib/types";
 
@@ -38,7 +39,9 @@ function AssistantBubble({ text, error }: { text: string; error?: boolean }) {
           error ? "text-[var(--due)] border-[var(--due)]" : "text-[var(--ink)]",
         ].join(" ")}
       >
-        {text}
+        <div className="[&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5">
+          <ReactMarkdown>{text}</ReactMarkdown>
+        </div>
       </div>
     </div>
   );

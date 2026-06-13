@@ -1,20 +1,55 @@
 # RAG System v1
 
-A retrieval-augmented generation (RAG) pipeline built from scratch — **PDF in, grounded answers out** — deliberately implemented *without* high-level frameworks like LangChain, so every layer (chunking, embeddings, vector storage, similarity search, generation) is written and understood directly rather than abstracted away.
+A retrieval-augmented generation (RAG) system built from scratch — **PDF in, grounded answers out** — deliberately implemented *without* high-level frameworks like LangChain, so every layer (chunking, embeddings, vector storage, similarity search, generation) is written and understood directly rather than abstracted away.
 
-> **Learning project, v1.** The goal here wasn't to ship a product — it was to understand the internals of RAG by building each brick by hand. The system works end to end, and the limitations are documented honestly below.
+What started as a command-line pipeline now has a full-stack interface: a **Next.js** frontend and a **FastAPI** backend wrapping the same hand-built pipeline, with a hand-drawn, notebook-style UI for uploading a PDF and chatting with it.
+
+> **Learning project, v1.** The goal wasn't to ship a product — it was to understand the internals of RAG by building each brick by hand: first as scripts, then refactored into a reusable pipeline behind a real API and UI. The system works end to end, and its limitations (including why it currently runs locally) are documented honestly below.
+
+---
+
+## Demo
+
+![demo_images](assets/indexed.png) ![demo_images](assets/summarize_cont.png) ![demo_images](assets/talk_more1.png) ![demo_images](assets/talk_more2.png)
 
 ---
 
 ## What it does
 
-Give it a PDF and ask a question in plain English. The system:
+Upload a PDF and ask a question in plain English. The system:
 
-1. Splits the document into chunks
-2. Converts each chunk into a vector embedding
+1. Extracts the document text and splits it into overlapping chunks
+2. Converts each chunk into a vector embedding (locally, no API cost)
 3. Stores those vectors in a Postgres + `pgvector` database
 4. Embeds your question and finds the most semantically similar chunks
-5. Feeds those chunks to an LLM, which writes an answer **grounded in the document** (not its own training data)
+5. Feeds those chunks to an LLM, which writes an answer **grounded in the document** — and returns the source chunks the answer was based on
+
+The same pipeline is reachable two ways: as standalone scripts (`test.py` for indexing, `generation.py` for querying) and through the web app (`web/` + `server/`).
+
+## Architecture
+
+```
+                 Browser
+                    │  PDF / question
+                    ▼
+        Next.js app (web/, :3000)
+   ┌────────────────────────────────────┐
+   │  /api/upload   /api/query           │   server-side route handlers
+   │  (proxy → never expose Python to    │   so the browser never talks
+   │   the browser directly)             │   to FastAPI directly
+   └────────────────┬───────────────────┘
+                    │  HTTP
+                    ▼
+        FastAPI service (server/app.py, :8000)
+        /health  /upload  /query
+                    │
+                    ▼
+        pipeline.py  (clients loaded once, reused)
+   ┌────────────────────────────────────────────┐
+   │  PyPDF2 → FixedTokenChunker → MiniLM (local) │
+   │  → Supabase/pgvector → Gemini                │
+   └────────────────────────────────────────────┘
+```
 
 ## Pipeline
 
@@ -24,42 +59,67 @@ PDF
      └─ chunking                 (token-based, 512 tokens / 100 overlap)
          └─ embeddings           (MiniLM, local, 384-dim)
              └─ vector storage   (Supabase / pgvector)
-                 └─ retrieval     (cosine similarity, top-k via SQL function)
+                 └─ retrieval     (cosine similarity, top-k via SQL RPC)
                      └─ augmentation  (retrieved chunks injected into prompt)
                          └─ generation  (Gemini, constrained to provided context)
-                             └─ grounded answer
+                             └─ grounded answer (+ source chunks)
 ```
 
 ## How it works
 
-**Ingestion** (`test.py`)
+**Indexing** — `pipeline.index_pdf()` (and the original `test.py`)
 - PDF text is extracted with **PyPDF2**.
-- Text is chunked using a token-based chunker (`chunking_evaluation`) at **512 tokens with 100-token overlap**, using `cl100k_base` purely as a size ruler.
-- Each chunk is embedded **locally** with `sentence-transformers` (`paraphrase-multilingual-MiniLM-L12-v2`, **384 dimensions**) — chosen so document ingestion never hits API rate limits or cost.
-- Chunks + vectors are inserted into a Supabase `document_chunks` table.
-- An optional PCA visualization (matplotlib) projects the 384-dim embeddings to 2D for inspection.
+- Text is chunked with a fixed-token chunker (`FixedTokenChunker` from `chunking_evaluation`) at **512 tokens with 100-token overlap**, using `cl100k_base` purely as a size ruler.
+- Each chunk is embedded **locally** with `sentence-transformers` (`paraphrase-multilingual-MiniLM-L12-v2`, **384 dimensions**) — chosen so ingestion never hits API rate limits or cost.
+- Chunks + vectors are upserted into a Supabase `document_chunks` table. The web flow is **single-document scoped**: each new upload clears the table first, so retrieval can't bleed across previously uploaded PDFs.
 
-**Retrieval + Generation** (`generation.py`)
-- The user's question is embedded with the **same MiniLM model** (this is mandatory — query and documents must live in the same vector space to be comparable).
-- A Postgres `match_documents` function performs cosine-similarity search and returns the top-k chunks. (PostgREST doesn't expose pgvector operators directly, so the search is wrapped in a SQL function and called via `rpc()`.)
-- The retrieved chunk text is injected into a grounding prompt that instructs the model to answer **only** from the provided context.
-- **Google Gemini** generates the final answer.
+**Retrieval + Generation** — `pipeline.answer_question()` (and the original `generation.py`)
+- The question is embedded with the **same MiniLM model** (mandatory — query and chunk vectors must live in the same space to be comparable).
+- A Postgres `match_documents` function performs cosine-similarity search and returns the top-k chunks. PostgREST doesn't expose pgvector operators directly, so the search is wrapped in a SQL function and called via `rpc()`.
+- A low threshold + generous count favours recall and lets the LLM filter the noise.
+- The retrieved chunk text is injected into a grounding prompt instructing the model to answer **only** from the provided context.
+- **Google Gemini** (`gemini-2.5-flash`) generates the final answer, and the API returns the source chunks (text preview + similarity) so the UI can show what the answer was based on.
+
+## Repository structure
+
+```
+rag_system_v1/
+├── generation.py            # standalone query script (CLI path)
+├── test.py                  # standalone indexing script (CLI path)
+├── server/                  # FastAPI backend
+│   ├── app.py               #   endpoints: /health, /upload, /query
+│   ├── pipeline.py          #   reusable pipeline (cached model + clients)
+│   └── requirements.txt     #   backend dependencies (the maintained list)
+├── web/                     # Next.js frontend (App Router, TS, Tailwind)
+│   └── app/
+│       ├── api/upload/route.ts   # server-side proxy → FastAPI /upload
+│       ├── api/query/route.ts    # server-side proxy → FastAPI /query
+│       ├── components/           # RagApp, UploadPanel, ChatPanel, icons
+│       ├── lib/                  # api.ts (RAG_API_URL), types.ts
+│       └── page.tsx, layout.tsx, globals.css
+├── reference/               # design reference (mockup + screenshot)
+└── LICENSE.txt
+```
 
 ## Tech stack
 
 | Layer | Tool |
 |---|---|
-| Language | Python |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 |
+| Backend | FastAPI + Uvicorn |
 | PDF extraction | PyPDF2 |
-| Chunking | `chunking_evaluation` |
+| Chunking | `chunking_evaluation` (`FixedTokenChunker`) |
 | Embeddings | `sentence-transformers` — `paraphrase-multilingual-MiniLM-L12-v2` (local, 384-dim) |
 | Vector store | Supabase (Postgres + `pgvector`) |
-| Generation | Google Gemini API |
-| Visualization | scikit-learn (PCA) + matplotlib |
+| Generation | Google Gemini (`gemini-2.5-flash`) |
 
-## Database setup
+## Running it locally
 
-Run once in the Supabase SQL editor.
+You'll run three things: the database (Supabase), the backend (FastAPI on `:8000`), and the frontend (Next.js on `:3000`).
+
+### 1. Database
+
+Run once in the Supabase SQL editor:
 
 ```sql
 -- Enable the extension
@@ -106,67 +166,98 @@ as $$
 $$;
 ```
 
-## Running it
+### 2. Environment variables
 
-1. **Clone & environment**
-   ```bash
-   git clone https://github.com/uzeyir-bayramli-3379/rag_system_v1.git
-   cd rag_system_v1
-   conda create -n rag_app python=3.12 && conda activate rag_app
-   pip install -r requirements.txt
-   ```
-   *(No `requirements.txt` yet — generate one with `pip freeze > requirements.txt`. Core deps: `sentence-transformers`, `supabase`, `google-genai`, `PyPDF2`, `chunking_evaluation`, `python-dotenv`, `scikit-learn`, `matplotlib`.)*
+Create a `.env` file **in the repo root** (the backend loads it from one level above `server/`). Never commit it.
 
-2. **Environment variables** — create a `.env` file (never commit it):
-   ```
-   GEMINI_API_KEY=your_key_here
-   SUPABASE_URL=https://your-project.supabase.co
-   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-   ```
-   > The **service role key** bypasses Row Level Security and is appropriate for this local backend script. Keep it out of version control and never expose it client-side.
+```
+GEMINI_API_KEY=your_key_here
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
 
-3. **Set up the database** — run the SQL above in Supabase.
+> The **service role key** bypasses Row Level Security and is appropriate for this server-side backend. Keep it out of version control and never expose it client-side.
 
-4. **Ingest a document** — place a PDF in the project folder and run the ingestion script once to populate the table.
+### 3. Backend (FastAPI)
 
-5. **Ask questions** — run `generation.py` and edit the `question` to query your document.
+```bash
+cd server
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app:app --reload --port 8000
+```
+
+The first run downloads the MiniLM model (a few hundred MB). Sanity-check it with `curl http://127.0.0.1:8000/health`.
+
+### 4. Frontend (Next.js)
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open **http://localhost:3000**. The frontend talks to the backend via `RAG_API_URL` (defaults to `http://127.0.0.1:8000`); override it with an env var if your backend runs elsewhere.
+
+### CLI path (no UI)
+
+The original scripts still work for a quick, interface-free run: put a PDF named `file.pdf` next to `test.py`, run `test.py` to index it, then edit the `question` in `generation.py` and run it.
+
+## API
+
+| Method | Endpoint | Body | Returns |
+|---|---|---|---|
+| `GET` | `/health` | — | `{ "status": "ok" }` |
+| `POST` | `/upload` | multipart PDF (≤ 15 MB) | `{ document_name, chunks }` |
+| `POST` | `/query` | `{ "question": "..." }` | `{ answer, sources[] }` |
+
+`sources` carries each retrieved chunk's `document_name`, `chunk_index`, `similarity`, and a text `preview`, so the answer is always traceable back to the document.
 
 ## Design notes
 
 - **No LangChain, on purpose.** Every stage is implemented directly to learn how RAG actually works under the hood.
-- **Local embeddings, API generation.** Embeddings are high-volume (every chunk, every re-index) while generation is low-volume (a few calls per question). Running embeddings locally with MiniLM avoids rate limits entirely; Gemini handles the cheaper generation step.
+- **Local embeddings, API generation.** Embeddings are high-volume (every chunk, every re-index); generation is low-volume (a few calls per question). Running embeddings locally with MiniLM avoids rate limits entirely, while Gemini handles the cheaper generation step.
 - **Same model for documents and queries.** The embedding model and its 384-dim output are locked in — changing models means re-embedding everything.
+- **Server-side proxying.** The browser never calls the Python service directly; Next.js route handlers forward requests, keeping the backend and its keys off the client.
+- **Clients loaded once.** The MiniLM model and the Supabase/Gemini clients are cached for the process lifetime so each request doesn't reload them.
+
+## Deployment status
+
+**Currently runs locally only — by deliberate decision, not an oversight.** The embedding step needs `sentence-transformers` + PyTorch + the MiniLM weights loaded in memory, which doesn't fit the constraints of the obvious free tiers:
+
+- **Render free tier (512 MB)** OOMs while loading the model.
+- **Vercel Python functions** are ruled out by the bundle-size limit and short execution timeout — PyTorch is far too heavy.
+
+Hosting it properly means a paid container with enough memory (or moving embeddings to a hosted inference API, which trades cost/rate-limits back in). For a v1 learning project that wasn't worth it, so the system is demoed via the video/screenshots above rather than a live URL.
 
 ## Known limitations (v1)
 
-This is an honest accounting, not a finished product:
+An honest accounting, not a finished product:
 
-- **Naive PDF extraction.** PyPDF2 pulls in references, headers, and page numbers, which get chunked and embedded alongside real content — these can surface in retrieval as low-value matches. No preprocessing/cleaning yet.
-- **Script-shaped, not modular.** Ingestion and querying currently live in scripts rather than clean reusable modules.
-- **Single-document workflow.** The schema supports multiple documents (`document_name`), but the flow is built around one PDF at a time.
-- **No interface.** Runs from the command line; no UI.
+- **Naive PDF extraction.** PyPDF2 pulls in references, headers, and page numbers, which get chunked and embedded alongside real content and can surface as low-value matches. No cleaning step yet.
+- **Single-document workflow.** The schema supports multiple documents (`document_name`), but the web flow indexes one PDF at a time and clears the table on each upload.
 - **`match_threshold` needs per-document tuning** — generic queries return low similarity scores.
-- The HNSW index is present but unnecessary at small scale (added for correctness/practice).
+- **No persistence of chat history** across reloads.
+- The HNSW index is present but unnecessary at this scale (added for correctness/practice).
 
 ## Roadmap
 
-- [ ] Split into clean `ingest.py` / `rag.py` modules
 - [ ] PDF cleaning step (strip references, headers, page artifacts before chunking)
 - [ ] Multi-document support with `document_name` filtering in retrieval
-- [ ] Web UI (Next.js) + integration with a personal task tracker via deep links
+- [ ] Show retrieved sources inline in the chat UI
+- [ ] Proper hosting (memory-backed container or hosted embedding inference)
+- [ ] Deep-link integration with the Task Tracker
 
 ## References & learning resources
 
-This project was built incrementally while learning from:
+Built incrementally while learning from:
 
-- [What are embeddings? — Cloudflare](https://www.cloudflare.com/en-gb/learning/ai/what-are-embeddings/) — conceptual introduction to embeddings
-- **Adam Lucek** — [Vector Databases guide (`WTF_VDB.ipynb`)](https://github.com/ALucek/embeddings-guide/blob/main/WTF_VDB.ipynb) and [Chunking Strategies (`chunking.ipynb`)](https://github.com/ALucek/chunking-strategies/blob/main/chunking.ipynb), plus accompanying videos: [[1]](https://www.youtube.com/watch?v=NMfArmQ27m4) [[2]](https://youtu.be/Pk2BeaGbcTE)
-- [Convert PDF to txt in Python — GeeksforGeeks](https://www.geeksforgeeks.org/python/convert-pdf-to-txt-file-using-python/)
+- [What are embeddings? — Cloudflare](https://www.cloudflare.com/en-gb/learning/ai/what-are-embeddings/)
+- **Adam Lucek** — [Vector Databases guide](https://github.com/ALucek/embeddings-guide/blob/main/WTF_VDB.ipynb) and [Chunking Strategies](https://github.com/ALucek/chunking-strategies/blob/main/chunking.ipynb), plus accompanying videos: [[1]](https://www.youtube.com/watch?v=NMfArmQ27m4) [[2]](https://youtu.be/Pk2BeaGbcTE)
 - [`all-MiniLM-L12-v2` model card — Hugging Face](https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2)
-- [PCA — scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html)
 - [pgvector](https://github.com/pgvector/pgvector)
 - [Vector columns — Supabase Docs](https://supabase.com/docs/guides/ai/vector-columns)
 
 ## License
 
-MIT — see `LICENSE`
+MIT — see `LICENSE.txt`
