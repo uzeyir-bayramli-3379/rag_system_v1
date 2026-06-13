@@ -9,8 +9,8 @@ What started as a command-line pipeline now has a full-stack interface: a **Next
 ---
 
 ## Demo
+<video src="https://github.com/user-attachments/assets/5ee60a7f-7f9a-4f1e-a1e9-dae82bf19b4a" width="600" controls></video>
 
-https://github.com/user-attachments/assets/5ee60a7f-7f9a-4f1e-a1e9-dae82bf19b4a
 ![demo_images](assets/indexed.png) ![demo_images](assets/summarize_cont.png) ![demo_images](assets/talk_more1.png) ![demo_images](assets/talk_more2.png)
 
 
