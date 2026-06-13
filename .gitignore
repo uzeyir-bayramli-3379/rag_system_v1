@@ -49,3 +49,5 @@ output.txt
 chroma_db/
 *.sqlite3
 *.faiss
+
+*.log
